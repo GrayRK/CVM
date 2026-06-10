@@ -1,0 +1,39 @@
+# Зависимости
+node_modules/
+
+# Сборка и кэш WXT/Vite
+.wxt/
+.output/
+dist/
+*.zip
+stats.html
+
+# Логи
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Переменные окружения (секреты не коммитим)
+.env
+.env.*
+!.env.example
+
+# Редакторы / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ОС
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Локальные настройки Claude Code (персональные, не для общего репозитория)
+.claude/settings.local.json

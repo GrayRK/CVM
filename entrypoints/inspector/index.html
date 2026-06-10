@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CVM — Live State Inspector</title>
+    <style>
+      :root {
+        --bg: #1a1a1e;
+        --panel: #232329;
+        --text: #e8e8ea;
+        --muted: #8a8a92;
+        --accent: #7c3aed;
+        --border: #33333b;
+        --ok: #34d399;
+        --off: #6b7280;
+        --highlight: rgba(124, 58, 237, 0.45);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        max-width: 760px;
+        margin: 0 auto 16px;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .conn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .conn .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--off);
+        transition: background-color 0.2s ease;
+      }
+      .conn.online .dot {
+        background: var(--ok);
+      }
+      table {
+        width: 100%;
+        max-width: 760px;
+        margin: 0 auto;
+        border-collapse: collapse;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        font-size: 14px;
+      }
+      th,
+      td {
+        padding: 10px 14px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+      thead th {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .col-dot {
+        width: 18px;
+      }
+      .row-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--border);
+        transition: background-color 0.2s ease;
+      }
+      .cell-name {
+        font-family: 'Consolas', monospace;
+        color: var(--text);
+      }
+      .cell-value {
+        font-family: 'Consolas', monospace;
+        color: var(--ok);
+        border-radius: 4px;
+        transition: background-color 0.9s ease;
+      }
+      .cell-type,
+      .cell-source {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .changed .cell-value {
+        background: var(--highlight);
+        color: var(--text);
+        transition: background-color 0s;
+      }
+      .changed .row-dot {
+        background: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Live State Inspector</h1>
+      <div id="conn" class="conn">
+        <span class="dot"></span>
+        <span id="conn-label">отключено</span>
+      </div>
+    </header>
+
+    <table>
+      <thead>
+        <tr>
+          <th class="col-dot"></th>
+          <th>Переменная</th>
+          <th>Значение</th>
+          <th>Тип</th>
+          <th>Источник</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

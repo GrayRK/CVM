@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClaudeVoiceMaster</title>
+    <style>
+      :root {
+        --bg: #1e1e22;
+        --panel: #27272d;
+        --text: #e8e8ea;
+        --muted: #9a9aa2;
+        --accent: #7c3aed;
+        --border: #36363d;
+        --ok: #34d399;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 14px;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        font-size: 13px;
+        color: var(--text);
+        background: var(--bg);
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .icon-btn {
+        font-family: 'Consolas', monospace;
+        font-size: 13px;
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+      .icon-btn:hover {
+        border-color: var(--accent);
+      }
+      .field {
+        margin-bottom: 12px;
+      }
+      .field > label {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+      }
+      input[type='password'],
+      select {
+        width: 100%;
+        padding: 6px 8px;
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      input[type='range'] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .row.toggle {
+        margin-bottom: 10px;
+      }
+      .slider-value {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .status .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--ok);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>ClaudeVoiceMaster</h1>
+      <button id="open-inspector" class="icon-btn" title="Developer Tools">&lt;/&gt;</button>
+    </header>
+
+    <div class="field">
+      <label for="api-key">API ключ</label>
+      <input id="api-key" type="password" autocomplete="off" placeholder="sk-..." />
+    </div>
+
+    <div class="field">
+      <label for="language">Язык перевода</label>
+      <select id="language"></select>
+    </div>
+
+    <div class="field">
+      <label for="voice">Голос TTS</label>
+      <select id="voice"></select>
+    </div>
+
+    <div class="row toggle">
+      <label for="tts-enabled">Озвучка</label>
+      <input id="tts-enabled" type="checkbox" />
+    </div>
+
+    <div class="row toggle">
+      <label for="subtitles-enabled">Субтитры</label>
+      <input id="subtitles-enabled" type="checkbox" />
+    </div>
+
+    <div class="row toggle">
+      <label for="use-youtube-translation">Использовать автоперевод</label>
+      <input id="use-youtube-translation" type="checkbox" />
+    </div>
+
+    <div class="row toggle">
+      <label for="auto-start">Запускать автоматически</label>
+      <input id="auto-start" type="checkbox" />
+    </div>
+
+    <div class="field">
+      <div class="row">
+        <label for="tts-volume">Громкость озвучки</label>
+        <span id="tts-volume-value" class="slider-value">90%</span>
+      </div>
+      <input id="tts-volume" type="range" min="0" max="100" step="1" />
+    </div>
+
+    <div class="field">
+      <div class="row">
+        <label for="ducking">Приглушение оригинала</label>
+        <span id="ducking-value" class="slider-value">40%</span>
+      </div>
+      <input id="ducking" type="range" min="0" max="80" step="1" />
+    </div>
+
+    <div class="status">
+      <span class="dot"></span>
+      <span id="status">Готов</span>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
