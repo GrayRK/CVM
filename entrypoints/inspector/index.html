@@ -265,6 +265,284 @@
         color: var(--muted);
         font-style: italic;
       }
+
+      /* --- API Monitor (Стадия 3.2) --- */
+      .banner-actions {
+        margin-top: 8px;
+      }
+      .monitor-btn {
+        font-family: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: rgba(124, 58, 237, 0.16);
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        padding: 5px 10px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+      .monitor-btn:hover {
+        background: rgba(124, 58, 237, 0.32);
+      }
+      .monitor-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        z-index: 100;
+      }
+      .monitor-overlay[hidden] {
+        display: none;
+      }
+      .monitor-card {
+        width: 100%;
+        max-width: 440px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+      }
+      .monitor-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+      }
+      .monitor-head h3 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .monitor-sub {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 400;
+        margin-left: 8px;
+      }
+      .monitor-close {
+        font-family: inherit;
+        font-size: 16px;
+        line-height: 1;
+        color: var(--muted);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 6px;
+      }
+      .monitor-close:hover {
+        color: var(--text);
+        background: var(--bg);
+      }
+      .monitor-body {
+        margin: 0;
+        padding: 8px 18px 18px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0;
+      }
+      .monitor-row {
+        display: contents;
+      }
+      .monitor-row dt,
+      .monitor-row dd {
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .monitor-row:last-child dt,
+      .monitor-row:last-child dd {
+        border-bottom: none;
+      }
+      .monitor-row dt {
+        color: var(--muted);
+      }
+      .monitor-row dd {
+        margin: 0;
+        text-align: right;
+        font-family: 'Consolas', monospace;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Фиксация стоимости в модалке */
+      .monitor-cost {
+        padding: 4px 18px 18px;
+        border-top: 1px solid var(--border);
+      }
+      .mc-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 12px 0 8px;
+      }
+      .mc-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .mc-dollar {
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .mc-input {
+        flex: 1;
+        font-family: 'Consolas', monospace;
+        font-size: 14px;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+      }
+      .mc-input:disabled {
+        color: var(--muted);
+        background: var(--panel);
+        cursor: default;
+      }
+      .mc-fix {
+        font-family: inherit;
+        font-size: 13px;
+        color: #fff;
+        background: var(--accent);
+        border: none;
+        border-radius: 6px;
+        padding: 8px 14px;
+        cursor: pointer;
+      }
+      .mc-fix:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .mc-note {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 8px;
+        min-height: 1em;
+      }
+      .mc-note.locked {
+        color: var(--ok);
+      }
+      .mc-note.error {
+        color: #f87171;
+      }
+
+      /* --- Калькулятор стоимости (Стадия 3.3) --- */
+      .calc {
+        max-width: 760px;
+        margin: 28px auto 40px;
+      }
+      .calc-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .calc-head h2 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .calc-reset {
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--text);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 12px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease;
+      }
+      .calc-reset:hover:not(:disabled) {
+        border-color: #dc2626;
+        color: #f87171;
+      }
+      .calc-reset:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .calc-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px 18px;
+      }
+      .calc-empty {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .calc-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .calc-row label {
+        font-size: 13px;
+        color: var(--muted);
+        min-width: 110px;
+      }
+      .calc-row input[type='range'] {
+        flex: 1;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .calc-row input[type='range']:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .calc-num {
+        flex: 1;
+        font-family: 'Consolas', monospace;
+        font-size: 14px;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 7px 10px;
+      }
+      .calc-val {
+        min-width: 64px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-size: 14px;
+      }
+      .calc-live {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 0 0 14px;
+        font-variant-numeric: tabular-nums;
+      }
+      .calc-stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 18px;
+        border-top: 1px solid var(--border);
+        padding-top: 12px;
+      }
+      .cs-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13px;
+      }
+      .cs-label {
+        color: var(--muted);
+      }
+      .cs-val {
+        font-family: 'Consolas', monospace;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
     </style>
   </head>
   <body>
@@ -298,6 +576,61 @@
         </div>
       </div>
       <div id="cache-list"></div>
+    </section>
+
+    <div id="monitor-overlay" class="monitor-overlay" hidden>
+      <div class="monitor-card" role="dialog" aria-modal="true" aria-labelledby="monitor-title">
+        <div class="monitor-head">
+          <h3 id="monitor-title">API Monitor</h3>
+          <button id="monitor-close" class="monitor-close" type="button" aria-label="Закрыть">
+            ✕
+          </button>
+        </div>
+        <dl id="monitor-body" class="monitor-body"></dl>
+        <div class="monitor-cost">
+          <div class="mc-title" id="mc-title">Стоимость этого перевода</div>
+          <div class="mc-row">
+            <span class="mc-dollar">$</span>
+            <input
+              type="number"
+              id="mc-input"
+              class="mc-input"
+              step="0.0001"
+              min="0"
+              placeholder="0.00"
+            />
+            <button type="button" id="mc-fix" class="mc-fix">Зафиксировать</button>
+          </div>
+          <div class="mc-note" id="mc-note"></div>
+        </div>
+      </div>
+    </div>
+
+    <section class="calc">
+      <div class="calc-head">
+        <h2 id="calc-title">Калькулятор стоимости</h2>
+        <button id="calc-reset" class="calc-reset" type="button">Сбросить калибровку</button>
+      </div>
+      <div class="calc-card">
+        <div class="calc-empty" id="calc-empty" hidden></div>
+        <div class="calc-controls" id="calc-controls">
+          <div class="calc-row">
+            <label id="calc-minutes-label" for="calc-minutes">Длина видео</label>
+            <input type="range" id="calc-minutes" min="1" max="180" step="1" value="15" />
+            <span class="calc-val" id="calc-minutes-out">15 мин</span>
+          </div>
+          <div class="calc-row">
+            <label id="calc-chars-label" for="calc-chars">Символов</label>
+            <input type="number" id="calc-chars" class="calc-num" min="0" step="1" />
+          </div>
+          <div class="calc-row">
+            <label id="calc-cost-label" for="calc-cost">Стоимость, $</label>
+            <input type="number" id="calc-cost" class="calc-num" min="0" step="0.0001" />
+          </div>
+          <div class="calc-live" id="calc-live"></div>
+          <div class="calc-stats" id="calc-stats"></div>
+        </div>
+      </div>
     </section>
 
     <script type="module" src="./main.ts"></script>

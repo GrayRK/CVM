@@ -11,9 +11,37 @@ import {
   CACHE_BANNER_API_LABEL,
   CACHE_BANNER_API_PLACEHOLDER,
   CACHE_BANNER_EMPTY_PLACEHOLDER,
+  API_MODEL,
+  API_MODEL_DISPLAY,
+  MONITOR_BUTTON_LABEL,
+  MONITOR_TITLE,
+  MONITOR_LABELS,
+  COST_FIX_TITLE,
+  COST_FIX_BUTTON,
+  COST_FIX_LOCKED_NOTE,
+  COST_FIX_HINT,
+  COST_FIX_CONFIRM,
+  COST_FIX_INVALID,
+  CALC_MAX_MINUTES,
+  CALC_DEFAULT_MINUTES,
+  CALC_RESET_CONFIRM,
+  CALC_LABELS,
 } from '@/lib/constants';
-import type { CvmRuntimeState, CvmCacheMeta, CvmCacheEntry, CaptionSegment } from '@/lib/types';
-import type { InspectorMessage, InspectorControlMessage } from '@/lib/messaging';
+import { costSamples, computeStats, clearCostSamples } from '@/lib/calibration';
+import type {
+  CvmRuntimeState,
+  CvmCacheMeta,
+  CvmCacheEntry,
+  CaptionSegment,
+  ApiTranslationMeta,
+  CalibrationStats,
+} from '@/lib/types';
+import type {
+  InspectorMessage,
+  InspectorControlMessage,
+  RecordApiCostMessage,
+  RecordApiCostResponse,
+} from '@/lib/messaging';
 
 type RuntimePort = ReturnType<typeof browser.runtime.connect>;
 
@@ -42,6 +70,12 @@ function asMasked(value: string): DisplayValue {
 function asNullableId(value: string | null): DisplayValue {
   return { text: value === null ? 'null' : `"${value}"`, typeName: 'String' };
 }
+function asProgress(value: CvmRuntimeState['translationProgress']): DisplayValue {
+  return {
+    text: value === null ? 'null' : `${value.done}/${value.total}`,
+    typeName: value === null ? 'null' : 'Progress',
+  };
+}
 
 // --- Доступ к storage-элементу в обобщённом виде ---
 interface WatchableValue<T> {
@@ -65,16 +99,50 @@ const connLabelEl = document.getElementById('conn-label');
 const cacheListEl = document.getElementById('cache-list');
 const cacheClearEl = document.getElementById('cache-clear');
 const cacheSortEl = document.getElementById('cache-sort');
+const monitorOverlayEl = document.getElementById('monitor-overlay');
+const monitorTitleEl = document.getElementById('monitor-title');
+const monitorBodyEl = document.getElementById('monitor-body');
+const monitorCloseEl = document.getElementById('monitor-close');
 if (
   rowsBody === null ||
   connEl === null ||
   connLabelEl === null ||
   cacheListEl === null ||
   cacheClearEl === null ||
-  cacheSortEl === null
+  cacheSortEl === null ||
+  monitorOverlayEl === null ||
+  monitorTitleEl === null ||
+  monitorBodyEl === null ||
+  monitorCloseEl === null
 ) {
   throw new Error('[CVM] inspector: разметка не найдена');
 }
+
+// Типизированный доступ к обязательным элементам (без длинных null-проверок).
+function requireEl<T extends HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (node === null) {
+    throw new Error(`[CVM] inspector: нет элемента #${id}`);
+  }
+  return node as T;
+}
+
+// Фиксация стоимости в модалке монитора.
+const mcTitleEl = requireEl<HTMLDivElement>('mc-title');
+const mcInputEl = requireEl<HTMLInputElement>('mc-input');
+const mcFixEl = requireEl<HTMLButtonElement>('mc-fix');
+const mcNoteEl = requireEl<HTMLDivElement>('mc-note');
+
+// Калькулятор стоимости.
+const calcResetEl = requireEl<HTMLButtonElement>('calc-reset');
+const calcEmptyEl = requireEl<HTMLDivElement>('calc-empty');
+const calcControlsEl = requireEl<HTMLDivElement>('calc-controls');
+const calcMinutesEl = requireEl<HTMLInputElement>('calc-minutes');
+const calcMinutesOutEl = requireEl<HTMLSpanElement>('calc-minutes-out');
+const calcCharsEl = requireEl<HTMLInputElement>('calc-chars');
+const calcCostEl = requireEl<HTMLInputElement>('calc-cost');
+const calcLiveEl = requireEl<HTMLDivElement>('calc-live');
+const calcStatsEl = requireEl<HTMLDivElement>('calc-stats');
 
 function createRow(id: string, label: string, source: string): void {
   const tr = document.createElement('tr');
@@ -154,6 +222,7 @@ function applyRuntimeState(state: CvmRuntimeState): void {
   updateRow('currentVideoId', asNullableId(state.currentVideoId));
   updateRow('translationStatus', asString(state.translationStatus));
   updateRow('translationActive', asBoolean(state.translationActive));
+  updateRow('translationProgress', asProgress(state.translationProgress));
 }
 
 function setConnection(online: boolean): void {
@@ -200,6 +269,145 @@ function createBanner(label: string, text: string, isPlaceholder: boolean): HTML
   return wrapper;
 }
 
+// --- API Monitor: кнопка в баннере + модалка с метриками (Стадия 3.2) ---
+
+function formatMs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} с`;
+}
+
+function formatInt(value: number): string {
+  return Math.round(value).toLocaleString('ru-RU');
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function addMonitorRow(label: string, value: string): void {
+  const row = document.createElement('div');
+  row.className = 'monitor-row';
+  const dt = document.createElement('dt');
+  dt.textContent = label;
+  const dd = document.createElement('dd');
+  dd.textContent = value;
+  row.append(dt, dd);
+  monitorBodyEl!.append(row);
+}
+
+// Контекст открытой модалки — для фиксации стоимости этого перевода.
+let openCost: { videoId: string; language: string } | null = null;
+
+// Настроить блок фиксации стоимости: заблокирован, если стоимость уже задана.
+function setupCostBlock(meta: ApiTranslationMeta): void {
+  mcTitleEl.textContent = COST_FIX_TITLE;
+  mcFixEl.textContent = COST_FIX_BUTTON;
+  mcNoteEl.classList.remove('error', 'locked');
+
+  const fixed = meta.costUsd !== null && meta.costUsd !== undefined;
+  if (fixed) {
+    mcInputEl.value = String(meta.costUsd);
+    mcInputEl.disabled = true;
+    mcFixEl.disabled = true;
+    mcNoteEl.textContent = COST_FIX_LOCKED_NOTE;
+    mcNoteEl.classList.add('locked');
+  } else {
+    mcInputEl.value = '';
+    mcInputEl.disabled = false;
+    mcFixEl.disabled = false;
+    mcNoteEl.textContent = COST_FIX_HINT;
+  }
+}
+
+function openMonitor(meta: ApiTranslationMeta, videoId: string, language: string): void {
+  openCost = { videoId, language };
+
+  monitorTitleEl!.textContent = MONITOR_TITLE;
+  const sub = document.createElement('span');
+  sub.className = 'monitor-sub';
+  sub.textContent = language;
+  monitorTitleEl!.append(sub);
+
+  monitorBodyEl!.replaceChildren();
+  const modelName = meta.model === API_MODEL ? API_MODEL_DISPLAY : meta.model;
+  addMonitorRow(MONITOR_LABELS.model, modelName);
+  addMonitorRow(MONITOR_LABELS.batches, formatInt(meta.batchCount));
+  addMonitorRow(
+    MONITOR_LABELS.charsPerBatch,
+    formatInt(meta.batchCount === 0 ? 0 : meta.charsTotal / meta.batchCount),
+  );
+  addMonitorRow(MONITOR_LABELS.charsTotal, formatInt(meta.charsTotal));
+  addMonitorRow(MONITOR_LABELS.segments, formatInt(meta.segmentCount));
+  addMonitorRow(MONITOR_LABELS.batchTime, formatMs(average(meta.batchMs)));
+  addMonitorRow(MONITOR_LABELS.totalTime, formatMs(meta.totalMs));
+  addMonitorRow(MONITOR_LABELS.inputTokens, formatInt(meta.inputTokens));
+  addMonitorRow(MONITOR_LABELS.outputTokens, formatInt(meta.outputTokens));
+
+  setupCostBlock(meta);
+  monitorOverlayEl!.hidden = false;
+}
+
+function closeMonitor(): void {
+  monitorOverlayEl!.hidden = true;
+  openCost = null;
+}
+
+// Зафиксировать введённую стоимость: валидация → подтверждение → запись в фон.
+async function fixCost(): Promise<void> {
+  if (openCost === null) {
+    return;
+  }
+  const value = Number.parseFloat(mcInputEl.value);
+  if (!(value > 0) || !Number.isFinite(value)) {
+    mcNoteEl.textContent = COST_FIX_INVALID;
+    mcNoteEl.classList.add('error');
+    return;
+  }
+  if (!window.confirm(COST_FIX_CONFIRM.replace('%s', value.toFixed(4)))) {
+    return;
+  }
+  const message: RecordApiCostMessage = {
+    type: 'record-api-cost',
+    videoId: openCost.videoId,
+    language: openCost.language,
+    costUsd: value,
+  };
+  const response = (await browser.runtime.sendMessage(message)) as
+    | RecordApiCostResponse
+    | undefined;
+  if (response?.ok === true) {
+    mcInputEl.value = value.toFixed(4);
+    mcInputEl.disabled = true;
+    mcFixEl.disabled = true;
+    mcNoteEl.classList.remove('error');
+    mcNoteEl.classList.add('locked');
+    mcNoteEl.textContent = COST_FIX_LOCKED_NOTE;
+  } else {
+    mcNoteEl.textContent = `Ошибка: ${response?.error ?? 'нет ответа'}`;
+    mcNoteEl.classList.add('error');
+  }
+}
+
+// Добавить в баннер кнопку открытия монитора для метрик этого языка.
+function appendMonitorButton(
+  wrapper: HTMLElement,
+  meta: ApiTranslationMeta,
+  videoId: string,
+  language: string,
+): void {
+  const actions = document.createElement('div');
+  actions.className = 'banner-actions';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'monitor-btn';
+  button.textContent = MONITOR_BUTTON_LABEL;
+  button.addEventListener('click', () => openMonitor(meta, videoId, language));
+  actions.append(button);
+  wrapper.append(actions);
+}
+
 // Заполнить тело: оригинал + по баннеру на каждый целевой язык + заглушка API.
 function fillBody(body: HTMLElement, entry: CvmCacheEntry): void {
   body.replaceChildren();
@@ -228,14 +436,26 @@ function fillBody(body: HTMLElement, entry: CvmCacheEntry): void {
     );
   }
 
-  const apiText = entry.apiTranslation === null ? '' : segmentsToText(entry.apiTranslation);
-  body.append(
-    createBanner(
-      CACHE_BANNER_API_LABEL,
-      apiText === '' ? CACHE_BANNER_API_PLACEHOLDER : apiText,
-      apiText === '',
-    ),
-  );
+  // Переводы Claude API: по баннеру на язык, либо один плейсхолдер, если их нет.
+  const apiLanguages = Object.keys(entry.apiTranslations).sort();
+  if (apiLanguages.length === 0) {
+    body.append(createBanner(CACHE_BANNER_API_LABEL, CACHE_BANNER_API_PLACEHOLDER, true));
+  } else {
+    for (const language of apiLanguages) {
+      const text = segmentsToText(entry.apiTranslations[language] ?? []);
+      const banner = createBanner(
+        `${CACHE_BANNER_API_LABEL} · ${language}`,
+        text === '' ? CACHE_BANNER_EMPTY_PLACEHOLDER : text,
+        text === '',
+      );
+      // Кнопка монитора — только если по этому языку есть замеры (apiMeta).
+      const meta = (entry.apiMeta ?? {})[language];
+      if (meta !== undefined) {
+        appendMonitorButton(banner, meta, entry.videoId, language);
+      }
+      body.append(banner);
+    }
+  }
 }
 
 // Раскрыть/свернуть позицию (аккордеон: раскрытие сворачивает прежнюю).
@@ -374,6 +594,129 @@ function clearCache(): void {
   sendControl({ type: 'clear-cache' });
 }
 
+// =====================================================================
+// Калькулятор стоимости (Стадия 3.3)
+// =====================================================================
+
+let calcStats: CalibrationStats = {
+  sampleCount: 0,
+  dollarsPerChar: 0,
+  charsPerMinute: 0,
+  tokensPerChar: 0,
+};
+let calcChars = 0; // канонический объём; из него считаются минуты и стоимость
+
+function formatMoney(value: number): string {
+  return value < 0.01 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`;
+}
+
+function addCsRow(label: string, value: string): void {
+  const row = document.createElement('div');
+  row.className = 'cs-row';
+  const labelEl = document.createElement('span');
+  labelEl.className = 'cs-label';
+  labelEl.textContent = label;
+  const valueEl = document.createElement('span');
+  valueEl.className = 'cs-val';
+  valueEl.textContent = value;
+  row.append(labelEl, valueEl);
+  calcStatsEl.append(row);
+}
+
+function renderCalcStats(): void {
+  calcStatsEl.replaceChildren();
+  addCsRow(CALC_LABELS.perKChar, `$${(calcStats.dollarsPerChar * 1000).toFixed(3)}`);
+  addCsRow(
+    CALC_LABELS.density,
+    calcStats.charsPerMinute > 0 ? formatInt(calcStats.charsPerMinute) : '—',
+  );
+  addCsRow(CALC_LABELS.samples, formatInt(calcStats.sampleCount));
+  addCsRow(CALC_LABELS.model, API_MODEL_DISPLAY);
+}
+
+// Пересчитать и расставить значения всех контролов из канонического объёма.
+// Программная установка .value не вызывает 'input' — обратной связи нет.
+function syncFromChars(chars: number): void {
+  const density = calcStats.charsPerMinute;
+  const rate = calcStats.dollarsPerChar;
+  const maxChars = density > 0 ? density * CALC_MAX_MINUTES : Math.max(chars, 0);
+  const clamped = Math.max(0, Math.min(chars, maxChars));
+  calcChars = clamped;
+
+  if (density > 0) {
+    const minutes = clamped / density;
+    calcMinutesEl.disabled = false;
+    calcMinutesEl.value = String(Math.round(minutes));
+    calcMinutesOutEl.textContent = `${Math.round(minutes)} мин`;
+  } else {
+    calcMinutesEl.disabled = true;
+    calcMinutesOutEl.textContent = '—';
+  }
+
+  calcCharsEl.value = String(Math.round(clamped));
+  const cost = clamped * rate;
+  calcCostEl.value = cost.toFixed(4);
+
+  const tokens = Math.round(clamped * calcStats.tokensPerChar);
+  calcLiveEl.textContent = `${formatMoney(cost)} · ≈ ${formatInt(tokens)} ${CALC_LABELS.tokensUnit}`;
+}
+
+function renderCalc(): void {
+  calcResetEl.disabled = calcStats.sampleCount === 0;
+
+  const usable = calcStats.dollarsPerChar > 0;
+  calcEmptyEl.hidden = usable;
+  calcControlsEl.hidden = !usable;
+  if (!usable) {
+    calcEmptyEl.textContent = CALC_LABELS.empty;
+    return;
+  }
+
+  calcMinutesEl.max = String(CALC_MAX_MINUTES);
+  if (calcChars <= 0) {
+    // Первичная инициализация объёма от стартовой длины видео.
+    calcChars =
+      calcStats.charsPerMinute > 0 ? calcStats.charsPerMinute * CALC_DEFAULT_MINUTES : 5000;
+  }
+  renderCalcStats();
+  syncFromChars(calcChars);
+}
+
+async function loadCalibration(): Promise<void> {
+  const samples = await costSamples.getValue();
+  calcStats = computeStats(samples, API_MODEL);
+  renderCalc();
+}
+
+async function resetCalibration(): Promise<void> {
+  if (!window.confirm(CALC_RESET_CONFIRM)) {
+    return;
+  }
+  await clearCostSamples();
+  calcChars = 0; // watch пересоберёт stats и перерисует
+}
+
+function initCalc(): void {
+  calcMinutesEl.addEventListener('input', () => {
+    syncFromChars(Number(calcMinutesEl.value) * calcStats.charsPerMinute);
+  });
+  calcCharsEl.addEventListener('input', () => {
+    syncFromChars(Number(calcCharsEl.value));
+  });
+  calcCostEl.addEventListener('input', () => {
+    const rate = calcStats.dollarsPerChar;
+    syncFromChars(rate > 0 ? Number(calcCostEl.value) / rate : 0);
+  });
+  calcResetEl.addEventListener('click', () => {
+    void resetCalibration();
+  });
+  costSamples.watch((samples) => {
+    calcStats = computeStats(samples, API_MODEL);
+    renderCalc();
+  });
+  void loadCalibration();
+}
+
 function connect(): void {
   const port = browser.runtime.connect({ name: INSPECTOR_PORT_NAME });
   activePort = port;
@@ -412,6 +755,7 @@ function init(): void {
   createRow('translationActive', 'translationActive', SOURCE_RUNTIME);
   createRow('currentVideoId', 'currentVideoId', SOURCE_RUNTIME);
   createRow('translationStatus', 'translationStatus', SOURCE_RUNTIME);
+  createRow('translationProgress', 'translationProgress', SOURCE_RUNTIME);
 
   bindStorageRow('videoDucking', settings.videoDucking, asNumber);
   bindStorageRow('translationVolume', settings.translationVolume, asNumber);
@@ -425,6 +769,24 @@ function init(): void {
 
   cacheClearEl!.addEventListener('click', clearCache);
   cacheSortEl!.addEventListener('click', toggleSort);
+
+  // Закрытие модалки монитора: крестик, клик по фону, Esc.
+  monitorCloseEl!.addEventListener('click', closeMonitor);
+  monitorOverlayEl!.addEventListener('click', (event: MouseEvent) => {
+    if (event.target === monitorOverlayEl) {
+      closeMonitor();
+    }
+  });
+  document.addEventListener('keydown', (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && monitorOverlayEl!.hidden === false) {
+      closeMonitor();
+    }
+  });
+
+  mcFixEl.addEventListener('click', () => {
+    void fixCost();
+  });
+  initCalc();
 
   connect();
   console.info('[CVM] inspector ready');

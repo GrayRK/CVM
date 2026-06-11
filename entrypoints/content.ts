@@ -8,6 +8,9 @@ import type {
   CacheLookupMessage,
   CacheLookupResponse,
   CacheStoreMessage,
+  ApiTranslateMessage,
+  ApiTranslateResponse,
+  TabMessage,
 } from '@/lib/messaging';
 import {
   YOUTUBE_MATCHES,
@@ -16,6 +19,7 @@ import {
   WIDGET_MOUNT_POLL_MS,
   WIDGET_LABEL_START,
   WIDGET_LABEL_STOP,
+  WIDGET_LABEL_TRANSLATING,
   BRIDGE_MESSAGE_SOURCE,
   TIMEDTEXT_FORMAT,
   TIMEDTEXT_FORMAT_PARAM,
@@ -203,12 +207,53 @@ export default defineContentScript({
   main(ctx) {
     let active = false;
     let button: HTMLButtonElement | null = null;
+    let currentVideoId: string | null = null; // видео текущего пайплайна (для индикатора)
+    let progressText: string | null = null; // подпись прогресса перевода или null
 
     function reportActive(): void {
       const message: BackgroundMessage = { type: 'set-translation-active', active };
       void browser.runtime.sendMessage(message).catch(() => {
         // background мог быть усыплён — состояние синхронизируется при следующем сообщении.
       });
+    }
+
+    // Перевод оригинала через Claude API (если задан ключ и язык ≠ оригинала).
+    async function maybeTranslateViaApi(
+      videoId: string,
+      originalLanguage: string,
+      targetLanguage: string,
+      original: CaptionSegment[],
+      hasApiTranslation: boolean,
+    ): Promise<void> {
+      if (baseLanguage(originalLanguage) === baseLanguage(targetLanguage)) {
+        console.info(
+          `[CVM] целевой язык совпадает с оригиналом (${originalLanguage}) — перевод API не нужен`,
+        );
+        return;
+      }
+      if (hasApiTranslation) {
+        console.info(`[CVM] перевод API "${targetLanguage}" уже в кэше — пропуск`);
+        return;
+      }
+      const apiKey = await settings.apiKey.getValue();
+      if (apiKey.trim() === '') {
+        console.warn('[CVM] API-ключ не задан — перевод через API пропущен (укажи ключ в popup)');
+        return;
+      }
+      const request: ApiTranslateMessage = {
+        type: 'api-translate',
+        videoId,
+        language: targetLanguage,
+        original,
+      };
+      const response = (await browser.runtime.sendMessage(request)) as
+        | ApiTranslateResponse
+        | undefined;
+      if (response?.ok === true) {
+        console.info(`[CVM] перевод API "${targetLanguage}" готов и закэширован`);
+      } else {
+        console.warn(`[CVM] перевод API не выполнен: ${response?.error ?? 'нет ответа'}`);
+      }
     }
 
     // Извлечь и закэшировать тексты текущего видео (если ещё не в кэше).
@@ -224,6 +269,7 @@ export default defineContentScript({
         );
         return;
       }
+      currentVideoId = data.videoId;
       const originalLanguage = data.originalLanguage ?? 'unknown';
       const targetLanguage = await settings.targetLanguage.getValue();
       const useYoutubeTranslation = await settings.useYoutubeTranslation.getValue();
@@ -247,25 +293,29 @@ export default defineContentScript({
         originalKind: 'manual' as const,
       };
 
-      // Режим «Использовать автоперевод» выключен — кэшируем только оригинал.
+      // Режим «Использовать автоперевод» выключен — оригинал + перевод Claude API.
       if (!useYoutubeTranslation) {
-        if (lookupResponse?.entryExists === true) {
-          console.info('[CVM] оригинал уже в кэше (автоперевод выключен) — пропуск');
-          return;
-        }
         const originalSegments = parseSegments(data.capturedBody);
         if (originalSegments.length === 0) {
           console.warn('[CVM] перехваченный оригинал пуст — кэш не записан');
           return;
         }
-        const store: CacheStoreMessage = {
-          type: 'cache-store',
-          ...baseStore,
-          original: originalSegments,
-        };
-        await browser.runtime.sendMessage(store);
-        console.info(
-          `[CVM] закэшировано: только оригинал ${originalSegments.length} сегм. (автоперевод выключен)`,
+        // Оригинал кэшируем один раз (если записи ещё нет).
+        if (lookupResponse?.entryExists !== true) {
+          const store: CacheStoreMessage = {
+            type: 'cache-store',
+            ...baseStore,
+            original: originalSegments,
+          };
+          await browser.runtime.sendMessage(store);
+          console.info(`[CVM] закэширован оригинал: ${originalSegments.length} сегм.`);
+        }
+        await maybeTranslateViaApi(
+          data.videoId,
+          originalLanguage,
+          targetLanguage,
+          originalSegments,
+          lookupResponse?.hasApiTranslation === true,
         );
         return;
       }
@@ -307,9 +357,30 @@ export default defineContentScript({
       if (button === null) {
         return;
       }
-      button.textContent = active ? WIDGET_LABEL_STOP : WIDGET_LABEL_START;
+      // Пока идёт перевод — показываем индикатор N/M вместо «Выключить перевод».
+      button.textContent = active
+        ? (progressText ?? WIDGET_LABEL_STOP)
+        : WIDGET_LABEL_START;
       button.dataset.active = String(active);
     }
+
+    // Прогресс перевода из background: обновляем подпись кнопки активного видео.
+    function onTabMessage(message: TabMessage): void {
+      if (message.type !== 'translation-progress') {
+        return;
+      }
+      if (!active || message.videoId !== currentVideoId) {
+        return;
+      }
+      const inProgress = message.status === 'translating' && message.done < message.total;
+      progressText = inProgress
+        ? `${WIDGET_LABEL_TRANSLATING}… ${message.done}/${message.total}`
+        : null;
+      render();
+    }
+    browser.runtime.onMessage.addListener((raw: unknown) => {
+      onTabMessage(raw as TabMessage);
+    });
 
     function resetActive(): void {
       // Новое видео / SPA-навигация — состояние перевода начинается заново.
@@ -317,6 +388,7 @@ export default defineContentScript({
         return;
       }
       active = false;
+      progressText = null;
       render();
       reportActive();
     }

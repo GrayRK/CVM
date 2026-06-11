@@ -1,6 +1,12 @@
 import { storage } from '#imports';
 import { CACHE_ENTRY_PREFIX, CACHE_INDEX_KEY } from '@/lib/constants';
-import type { CvmCacheEntry, CvmCacheMeta, CaptionSegment, CaptionKind } from '@/lib/types';
+import type {
+  CvmCacheEntry,
+  CvmCacheMeta,
+  CaptionSegment,
+  CaptionKind,
+  ApiTranslationMeta,
+} from '@/lib/types';
 
 // Слой кэша текстов поверх chrome.storage.local (Стадия 2).
 // Одна запись на видео (ключ cvm_cap_{videoId}); внутри — оригинал один раз и
@@ -23,7 +29,7 @@ function toMeta(entry: CvmCacheEntry): CvmCacheMeta {
     originalLanguage: entry.originalLanguage,
     originalKind: entry.originalKind,
     translationLanguages: Object.keys(entry.translations),
-    hasApi: entry.apiTranslation !== null,
+    apiLanguages: Object.keys(entry.apiTranslations),
   };
 }
 
@@ -85,7 +91,8 @@ export async function upsertEntry(params: UpsertEntryParams): Promise<void> {
     originalKind: params.originalKind,
     original: params.original,
     translations: {},
-    apiTranslation: null,
+    apiTranslations: {},
+    apiMeta: {},
   };
 
   if (params.language !== undefined && params.translation !== undefined) {
@@ -95,6 +102,51 @@ export async function upsertEntry(params: UpsertEntryParams): Promise<void> {
 
   await storage.setItem(entryKey(params.videoId), entry);
   await writeMeta(entry);
+}
+
+// Дописать перевод Claude API на целевой язык в существующую запись.
+// Запись оригинала должна уже существовать (её создаёт пайплайн до перевода);
+// если её нет — возвращаем false, перевод хранить не к чему.
+export async function upsertApiTranslation(
+  videoId: string,
+  language: string,
+  translation: CaptionSegment[],
+  meta: ApiTranslationMeta,
+): Promise<boolean> {
+  const entry = await getEntry(videoId);
+  if (entry === null) {
+    return false;
+  }
+  entry.apiTranslations[language] = translation;
+  // Старые записи могли быть сохранены без apiMeta — подстрахуемся.
+  entry.apiMeta = { ...entry.apiMeta, [language]: meta };
+  entry.updatedAt = Date.now();
+  await storage.setItem(entryKey(videoId), entry);
+  await writeMeta(entry);
+  return true;
+}
+
+// Записать зафиксированную стоимость перевода в apiMeta[language].
+// Возвращает обновлённый meta (для построения калибровочного замера) или null.
+export async function setApiCost(
+  videoId: string,
+  language: string,
+  costUsd: number,
+): Promise<ApiTranslationMeta | null> {
+  const entry = await getEntry(videoId);
+  if (entry === null) {
+    return null;
+  }
+  const meta = (entry.apiMeta ?? {})[language];
+  if (meta === undefined) {
+    return null;
+  }
+  const updated: ApiTranslationMeta = { ...meta, costUsd };
+  entry.apiMeta = { ...entry.apiMeta, [language]: updated };
+  entry.updatedAt = Date.now();
+  await storage.setItem(entryKey(videoId), entry);
+  await writeMeta(entry);
+  return updated;
 }
 
 // Список метаданных, отсортированный по времени создания (новые сверху).

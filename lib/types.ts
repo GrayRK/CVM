@@ -16,11 +16,18 @@ export interface CvmSettings {
 // Статус перевода для индикатора и Inspector.
 export type TranslationStatus = 'ready' | 'translating' | 'error';
 
+// Прогресс перевода через API: сколько батчей завершено из общего числа.
+export interface TranslationProgress {
+  done: number;
+  total: number;
+}
+
 // Рантайм-состояние (не сохраняется, живёт во время сессии).
 export interface CvmRuntimeState {
   currentVideoId: string | null;
   translationStatus: TranslationStatus;
   translationActive: boolean; // состояние кнопки виджета (вкл/выкл перевод)
+  translationProgress: TranslationProgress | null; // null — перевод не идёт
 }
 
 // Полный снимок состояния для Live State Inspector.
@@ -52,6 +59,45 @@ export interface CaptionSegment {
   text: string;
 }
 
+// Метрики одного перевода через Claude API (для API Monitor, Стадия 3.2).
+export interface ApiTranslationMeta {
+  model: string; // id модели, которой переводили
+  batchCount: number; // сколько батчей сформировано
+  segmentCount: number; // число сегментов (строк) субтитров
+  charsTotal: number; // суммарно символов оригинала, ушедших в перевод
+  inputTokens: number; // суммарно usage.input_tokens по всем батчам
+  outputTokens: number; // суммарно usage.output_tokens по всем батчам
+  totalMs: number; // wall-clock всего перевода (с учётом параллелизма)
+  batchMs: number[]; // длительность каждого батча, мс
+  videoSeconds: number; // длительность субтитровой дорожки, сек (для плотности речи)
+  costUsd: number | null; // зафиксированная стоимость перевода, $ (Стадия 3.3); null — не задана
+  createdAt: number; // когда выполнен замер, epoch мс
+}
+
+// --- Калибровка калькулятора стоимости (Стадия 3.3) ---
+
+// Один замер: реальная стоимость перевода против его объёма/длительности.
+// Хранится отдельно от кэша (cvm_cost_samples), переживает очистку кэша.
+export interface CostSample {
+  dollars: number; // фактически потрачено на перевод, $
+  chars: number; // символов оригинала (база расчёта)
+  tokensIn: number; // суммарно входных токенов
+  tokensOut: number; // суммарно выходных токенов
+  videoSeconds: number; // длительность видео/дорожки, сек
+  model: string; // модель, которой переводили (выборки фильтруются по ней)
+  videoId: string;
+  language: string;
+  at: number; // когда зафиксировано, epoch мс
+}
+
+// Усреднённые коэффициенты калькулятора по выборкам текущей модели.
+export interface CalibrationStats {
+  sampleCount: number; // сколько выборок учтено
+  dollarsPerChar: number; // R — средняя стоимость символа, $
+  charsPerMinute: number; // D — средняя плотность речи, символов/мин
+  tokensPerChar: number; // для оценки токенов в калькуляторе
+}
+
 // Полная запись кэша (одна на видео, хранится под ключом cvm_cap_{videoId}).
 // Оригинал хранится один раз; автопереводы — по одному на целевой язык.
 export interface CvmCacheEntry {
@@ -65,7 +111,10 @@ export interface CvmCacheEntry {
   original: CaptionSegment[];
   // Автопереводы YouTube (Google) по коду целевого языка: { ru: [...], es: [...] }.
   translations: Record<string, CaptionSegment[]>;
-  apiTranslation: CaptionSegment[] | null; // перевод Claude API — заготовка под Стадию 3
+  // Переводы Claude API по коду целевого языка (Стадия 3): { ru: [...], es: [...] }.
+  apiTranslations: Record<string, CaptionSegment[]>;
+  // Метрики перевода Claude API по коду целевого языка (для API Monitor).
+  apiMeta: Record<string, ApiTranslationMeta>;
 }
 
 // Метаданные записи для списка в Inspector (без тяжёлых сегментов).
@@ -77,6 +126,6 @@ export interface CvmCacheMeta {
   updatedAt: number;
   originalLanguage: string;
   originalKind: CaptionKind;
-  translationLanguages: string[]; // какие целевые языки уже есть
-  hasApi: boolean;
+  translationLanguages: string[]; // какие целевые языки автоперевода YouTube уже есть
+  apiLanguages: string[]; // какие целевые языки перевода Claude API уже есть
 }

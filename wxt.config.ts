@@ -23,6 +23,8 @@ export default defineConfig({
     name: 'ClaudeVoiceMaster',
     description: 'Перевод и озвучка субтитров YouTube в реальном времени.',
     permissions: ['storage'],
+    // Доступ к API перевода из service worker (fetch к aiprimetech.io).
+    host_permissions: ['https://aiprimetech.io/*'],
     icons: {
       16: '/icons/16.png',
       32: '/icons/32.png',

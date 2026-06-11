@@ -4,6 +4,7 @@ import type {
   CvmCacheMeta,
   CaptionSegment,
   CaptionKind,
+  TranslationStatus,
 } from '@/lib/types';
 
 // =====================================================================
@@ -69,7 +70,8 @@ export interface CacheLookupMessage {
 
 export interface CacheLookupResponse {
   entryExists: boolean; // запись (оригинал) уже в кэше
-  hasTranslation: boolean; // автоперевод на запрошенный язык уже есть
+  hasTranslation: boolean; // автоперевод YouTube на запрошенный язык уже есть
+  hasApiTranslation: boolean; // перевод Claude API на запрошенный язык уже есть
 }
 
 // Запись в кэш: создаёт запись (оригинал) или дополняет существующую.
@@ -91,10 +93,55 @@ export interface CacheStoreResponse {
   ok: boolean;
 }
 
+// Запрос перевода оригинала через Claude API на целевой язык.
+// Оригинал передаётся целиком; background батчит, переводит и пишет в кэш.
+export interface ApiTranslateMessage {
+  type: 'api-translate';
+  videoId: string;
+  language: string; // целевой язык перевода
+  original: CaptionSegment[];
+}
+
+export interface ApiTranslateResponse {
+  ok: boolean;
+  error: string | null; // напр. 'no-api-key', текст ошибки сети/формата
+}
+
+// Зафиксировать реальную стоимость перевода ($) — из API Monitor.
+// Фон сам берёт объём/токены/длительность из apiMeta и добавляет калибровочный замер.
+export interface RecordApiCostMessage {
+  type: 'record-api-cost';
+  videoId: string;
+  language: string;
+  costUsd: number;
+}
+
+export interface RecordApiCostResponse {
+  ok: boolean;
+  error: string | null; // напр. 'no-meta', 'already-fixed'
+}
+
 export type BackgroundMessage =
   | SetTranslationActiveMessage
   | CacheLookupMessage
-  | CacheStoreMessage;
+  | CacheStoreMessage
+  | ApiTranslateMessage
+  | RecordApiCostMessage;
+
+// =====================================================================
+// background  -->  content (tab)   (browser.tabs.sendMessage)
+// =====================================================================
+
+// Прогресс перевода через API для индикатора на кнопке виджета.
+export interface TranslationProgressMessage {
+  type: 'translation-progress';
+  videoId: string;
+  done: number; // завершено батчей
+  total: number; // всего батчей
+  status: TranslationStatus;
+}
+
+export type TabMessage = TranslationProgressMessage;
 
 // =====================================================================
 // мост content-bridge (MAIN)  <->  content (ISOLATED)   (window.postMessage)
