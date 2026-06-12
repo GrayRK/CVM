@@ -42,22 +42,34 @@ API ключ хранится только в `chrome.storage.local`. Никог
 ClaudeVoiceMaster/
 ├── CLAUDE.md
 ├── TASKS.md
-├── wxt.config.ts              ← конфиг расширения (заменяет часть manifest.json)
+├── wxt.config.ts                   ← конфиг расширения (заменяет часть manifest.json)
 ├── tsconfig.json
 ├── package.json
 ├── entrypoints/
-│   ├── background.ts          ← service worker: вызовы Claude API
-│   ├── content_bridge.ts      ← MAIN world: перехват субтитров YouTube
-│   ├── content.ts             ← ISOLATED world: логика, оверлей, TTS
+│   ├── background.ts               ← service worker: вызовы Claude API, кэш, рантайм per-tab
+│   ├── content-bridge.content.ts   ← MAIN world: перехват субтитров YouTube
+│   ├── content.ts                  ← ISOLATED world: логика, оверлей, виджет, TTS
 │   ├── popup/
-│   │   ├── index.html         ← интерфейс настроек
-│   │   └── main.ts            ← логика popup
-│   └── devtools/
-│       ├── index.html         ← панель разработчика (отдельная страница)
-│       └── main.ts            ← live state inspector + API monitor
+│   │   ├── index.html              ← интерфейс настроек
+│   │   └── main.ts                 ← логика popup
+│   └── inspector/                  ← отдельная страница расширения (НЕ Chrome DevTools)
+│       ├── index.html              ← Live State Inspector + меню кэша + API Monitor + калькулятор
+│       └── main.ts
+├── lib/                            ← общий фундамент (без магических констант и any)
+│   ├── constants.ts                ← именованные константы
+│   ├── types.ts                    ← общие типы
+│   ├── storage.ts                  ← типизированные storage.defineItem
+│   ├── messaging.ts                ← типы и хелперы сообщений между контекстами
+│   ├── cache.ts                    ← модель кэша текстов/переводов (cvm_cap_*, cvm_v_*)
+│   └── calibration.ts              ← калибровка калькулятора стоимости (R, D, выборки)
 └── public/
     └── icons/
 ```
+
+> **Примечание по именам:** папка `inspector/` (а не `devtools/`) — имя `devtools`
+> в WXT зарезервировано под настоящую панель Chrome DevTools. Контент-скрипт моста
+> именуется `content-bridge.content.ts` — WXT распознаёт контент-скрипты только
+> по шаблону `*.content.ts`.
 
 ---
 

@@ -1,85 +1,110 @@
 # 🎙️ ClaudeVoiceMaster
 
-> Watch YouTube in any language — translated and voiced in real time.
+> Смотри YouTube на любом языке — с переводом и озвучкой.
 
-![Status](https://img.shields.io/badge/status-in%20development-orange)
+![Статус](https://img.shields.io/badge/статус-в%20разработке-orange)
 ![Manifest](https://img.shields.io/badge/manifest-v3-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![WXT](https://img.shields.io/badge/built%20with-WXT-purple)
+![WXT](https://img.shields.io/badge/собрано%20на-WXT-purple)
 
 ---
 
-## What is it?
+## Что это?
 
-**ClaudeVoiceMaster (CVM)** is a Chrome extension that translates YouTube videos on the fly — extracting subtitles, translating them via Claude AI, and reading the translation aloud so you can watch content in any language without knowing it.
+**ClaudeVoiceMaster (CVM)** — расширение для Chrome, которое переводит
+YouTube-видео: берёт субтитры, переводит их через Claude AI и (в перспективе)
+озвучивает перевод, чтобы можно было смотреть контент на любом языке, не зная его.
 
-No more pausing to read. No more struggling with auto-translated captions. Just watch.
-
----
-
-## Features
-
-- 🌍 **Supports any language** available on YouTube — English, Japanese, Spanish, Korean and more
-- 🔊 **Voice-over translation** — hear the content in your language, not read it
-- 📝 **Subtitle overlay** — translated captions displayed directly on the video
-- ⚡ **Pre-translated before playback** — no lag, no stuttering mid-sentence
-- 🎚️ **Adjustable mix** — control TTS volume and how much the original audio is ducked
-- 💾 **Smart caching** — translated videos load instantly on repeat watches
-- 🛠️ **Developer panel** — live state inspector and API monitor for transparent debugging
+Никаких пауз на чтение. Никакой борьбы с кривым автопереводом субтитров.
+Просто смотри.
 
 ---
 
-## How it works
+## Возможности
+
+- 🌍 **Любой язык**, доступный на YouTube — английский, японский, испанский,
+  корейский и другие
+- 🧠 **Перевод через Claude AI** — качество выше штатного автоперевода YouTube
+- 🔁 **Два режима перевода** — готовый автоперевод YouTube или перевод через
+  Claude API (на выбор)
+- ⚡ **Перевод заранее, до воспроизведения** — без задержек и заиканий посреди фразы
+- 💾 **Умное кеширование** — повторный просмотр загружается мгновенно, перевод не
+  тянется заново
+- 🛠️ **Панель разработчика** — Live State Inspector, меню кэша, API Monitor и
+  калькулятор стоимости для полной прозрачности
+- 🎚️ **Гибкие настройки** — язык, голос, громкость TTS, приглушение оригинала
+- 🔊 **Озвучка перевода** *(в разработке — Стадия 4)* — слушать контент на своём
+  языке, а не читать
+- 📝 **Оверлей субтитров** *(в разработке)* — переведённые субтитры прямо на видео
+
+---
+
+## Как это работает
 
 ```
-YouTube Subtitles  →  Claude AI (translation)  →  TTS Engine (voice-over)
-                                                         ↓
-                                               Overlay + ducked original audio
+Субтитры YouTube  →  Claude AI (перевод)  →  TTS-движок (озвучка)
+                                                    ↓
+                                      Оверлей + приглушённый оригинал
 ```
 
-CVM reads the existing subtitle track from YouTube — no audio processing, no speech recognition needed. The text goes to Claude for translation, comes back, and is read aloud in sync with the video.
+CVM читает уже существующую дорожку субтитров YouTube — без обработки звука и
+распознавания речи. Текст уходит в Claude на перевод, возвращается и (на Стадии 4)
+будет озвучен синхронно с видео.
+
+Источник текста — перехват реального запроса плеера к `/api/timedtext`: прямой
+`fetch` по ссылке субтитров YouTube отдаёт пустой ответ без `pot`-токена, поэтому
+расширение берёт уже валидный запрос самого плеера.
 
 ---
 
-## Voice Engine Roadmap
+## Дорожная карта TTS-движков
 
-| Engine | Status | Quality | Notes |
+| Движок | Статус | Качество | Заметки |
 |---|---|---|---|
-| Edge TTS (Microsoft) | ✅ Current | ⭐⭐⭐⭐ | DmitryNeural / SvetlanaNeural |
-| CosyVoice 3 | 🔜 Planned | ⭐⭐⭐⭐⭐ | Local, voice cloning, 150ms latency |
-| Qwen3-TTS | 🔜 Planned | ⭐⭐⭐⭐⭐ | Local, 0.6B model, Russian support |
-| Yandex SpeechKit | 🔜 Planned | ⭐⭐⭐⭐⭐ | Best Russian voices on the market |
+| Edge TTS (Microsoft) | 🔜 Стартовый (Стадия 4) | ⭐⭐⭐⭐ | DmitryNeural / SvetlanaNeural через Web Speech API |
+| CosyVoice 3 | 🔜 В планах | ⭐⭐⭐⭐⭐ | Локальный, клонирование голоса, задержка ~150мс |
+| Qwen3-TTS | 🔜 В планах | ⭐⭐⭐⭐⭐ | Локальный, модель 0.6B, поддержка русского |
+| Yandex SpeechKit | 🔜 В планах | ⭐⭐⭐⭐⭐ | Лучшие русские голоса на рынке |
 
-All engines implement a common `TTSEngine` interface — swapping is a one-line change.
-
----
-
-## Tech Stack
-
-- **[WXT](https://wxt.dev)** — modern Chrome extension framework with HMR
-- **TypeScript** — strict mode throughout
-- **Claude AI** — translation via [aiprimetech.io](https://aiprimetech.io)
-- **Web Speech API** — voice synthesis (initial engine)
-- **Manifest V3** — current Chrome extension standard
+TTS-движок абстрагирован за общим интерфейсом — замена не требует переписывания
+логики.
 
 ---
 
-## Project Status
+## Технический стек
 
-| Component | Status |
+- **[WXT](https://wxt.dev)** — современный фреймворк для расширений Chrome с HMR
+- **TypeScript** — строгий режим, без `any`
+- **Claude AI** — перевод через [aiprimetech.io](https://aiprimetech.io)
+  (drop-in замена официального Anthropic API, модель `claude-sonnet-4-6`)
+- **Web Speech API** — синтез речи (стартовый движок, Стадия 4)
+- **Manifest V3** — актуальный стандарт расширений Chrome
+
+---
+
+## Статус проекта
+
+| Компонент | Статус |
 |---|---|
-| Popup UI + Settings | 🔨 In progress |
-| Live State Inspector | 🔨 In progress |
-| Claude API integration | ⬜ Planned |
-| API Monitor panel | ⬜ Planned |
-| TTS voice-over | ⬜ Planned |
-| Subtitle overlay | ⬜ Planned |
+| Popup: настройки | ✅ Готово |
+| Live State Inspector | ✅ Готово |
+| Извлечение текста из видео + кеш | ✅ Готово |
+| Меню кэша в Inspector | ✅ Готово |
+| Интеграция Claude API | ✅ Готово |
+| Панель API Monitor | ✅ Готово |
+| Калькулятор стоимости | ✅ Готово |
+| Рантайм-состояние per-tab | ✅ Готово |
+| Проработка дизайна Popup | ⬜ В планах |
+| Озвучка (TTS) | ⬜ В планах (Стадия 4) |
+| Оверлей субтитров на видео | ⬜ В планах |
+
+Подробности по стадиям и журнал реализации — в [TASKS.md](TASKS.md).
 
 ---
 
-## Getting Started
+## Запуск
 
-> Requires Node.js 18+ and a Chrome-based browser.
+> Нужны Node.js 18+ и браузер на базе Chrome.
 
 ```bash
 git clone https://github.com/yourusername/ClaudeVoiceMaster
@@ -88,11 +113,19 @@ npm install
 npm run dev
 ```
 
-WXT will automatically open Chrome with the extension loaded.
-Add your API key in the extension popup and open any YouTube video with subtitles.
+WXT автоматически откроет Chrome с загруженным расширением.
+Добавь свой API-ключ в popup расширения и открой любое YouTube-видео с субтитрами.
+
+Полезные команды:
+
+```bash
+npm run dev        # запуск Chrome с расширением (HMR)
+npm run build      # production-сборка
+npm run zip        # упаковка для публикации
+```
 
 ---
 
-## License
+## Лицензия
 
 MIT
